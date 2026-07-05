@@ -21,3 +21,8 @@ _quarantine/
 *_backup/
 *.zip
 .DS_Store
+data/raw/*.csv
+models/saved/*.pkl
+models/saved/*.keras
+venv/
+__pycache__/
