@@ -1,0 +1,35 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Upload Result{% endblock %}
+{% block page_title %}Analysis Result &mdash; {{ batch.filename }}{% endblock %}
+
+{% block content %}
+<section class="kpi-grid">
+  <div class="kpi-card"><div class="kpi-label">Rows Analyzed</div><div class="kpi-value">{{ batch.row_count }}</div></div>
+  <div class="kpi-card"><div class="kpi-label">Benign</div><div class="kpi-value">{{ batch.benign_count }}</div></div>
+  <div class="kpi-card kpi-card--alert"><div class="kpi-label">Malicious / Anomalous</div><div class="kpi-value">{{ batch.malicious_count }}</div></div>
+  <div class="kpi-card"><div class="kpi-label">Processing Time</div><div class="kpi-value">{{ batch.processing_ms|floatformat:1 }} ms</div></div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Detections (first 500 rows)</h2>
+    <a href="{% url 'dashboard:export_csv' %}?batch={{ batch.id }}" class="panel-link">export CSV &rarr;</a>
+  </div>
+  <table class="data-table">
+    <thead><tr><th>Row</th><th>Source IP</th><th>Verdict</th><th>Severity</th><th>RF Confidence</th><th>Recon. Error</th>{% if batch.detections.first.true_label is not None %}<th>True Label</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for d in detections %}
+      <tr class="sev-{{ d.severity|lower }}">
+        <td>{{ d.row_index }}</td>
+        <td class="mono">{{ d.source_ip }}</td>
+        <td>{{ d.get_verdict_display }}</td>
+        <td><span class="badge badge-{{ d.severity|lower }}">{{ d.severity }}</span></td>
+        <td class="mono">{{ d.rf_confidence|floatformat:3 }}</td>
+        <td class="mono">{{ d.reconstruction_error|floatformat:3 }}</td>
+        <td>{% if d.true_label is not None %}{{ d.true_label }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

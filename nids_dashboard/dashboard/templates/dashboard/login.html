@@ -1,0 +1,29 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Sign In{% endblock %}
+{% block auth_content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="brand-icon">&#9881;</div>
+      <div class="brand-name" style="font-family:var(--font-display);font-size:18px;font-weight:700">
+        Zero Day<span style="color:var(--brand)">Hunter</span>
+      </div>
+    </div>
+    <p class="auth-sub">AI-Based Hybrid Network Intrusion Detection System</p>
+    {% if messages %}{% for m in messages %}<div class="flash flash-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" autocomplete="username" required autofocus placeholder="Enter username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="current-password" required placeholder="Enter password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Sign In &rarr;</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

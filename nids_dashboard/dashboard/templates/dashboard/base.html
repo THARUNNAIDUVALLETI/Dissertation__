@@ -1,0 +1,89 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Zero Day Hunter{% endblock %} &mdash; SOC Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="stylesheet" href="{% static 'dashboard/css/style.css' %}">
+{% block extra_head %}{% endblock %}
+</head>
+<body class="{% if not request.user.is_authenticated %}auth-page{% endif %}">
+
+{% if request.user.is_authenticated %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">
+        <div class="brand-icon">&#9881;</div>
+        <div class="brand-name">Zero Day<span>Hunter</span></div>
+      </div>
+      <div class="brand-tagline">AI-Based Hybrid NIDS</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Main</div>
+      <a href="{% url 'dashboard:index' %}" class="nav-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}">
+        <span class="nav-icon">&#9635;</span> Dashboard
+      </a>
+      <a href="{% url 'dashboard:upload' %}" class="nav-link {% if 'upload' in request.resolver_match.url_name %}active{% endif %}">
+        <span class="nav-icon">&#8593;</span> Upload &amp; Analyse
+      </a>
+      <div class="nav-section">Security</div>
+      <a href="{% url 'dashboard:alerts' %}" class="nav-link {% if request.resolver_match.url_name == 'alerts' %}active{% endif %}">
+        <span class="nav-icon">&#9888;</span> Alerts
+      </a>
+      <a href="{% url 'dashboard:access_control' %}" class="nav-link {% if request.resolver_match.url_name == 'access_control' %}active{% endif %}">
+        <span class="nav-icon">&#128274;</span> Access Control
+      </a>
+      <div class="nav-section">Analysis</div>
+      <a href="{% url 'dashboard:reports' %}" class="nav-link {% if request.resolver_match.url_name == 'reports' %}active{% endif %}">
+        <span class="nav-icon">&#9783;</span> Reports
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">{{ request.user.username|first|upper }}</div>
+        <div>
+          <div class="user-name"><span class="status-dot"></span>{{ request.user.username }}</div>
+          <div class="user-role">{% if request.user.is_staff %}Administrator{% else %}SOC Analyst{% endif %}</div>
+        </div>
+      </div>
+      <a href="{% url 'dashboard:logout' %}" class="logout-link">&#x2B9E; Sign out</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+        <div class="breadcrumb">Zero Day Hunter &rsaquo; {% block page_title_sub %}Overview{% endblock %}</div>
+      </div>
+      <div class="topbar-right">
+        {% block page_meta %}{% endblock %}
+        <span class="health-badge health-{{ system_health|default:'offline'|lower }}">
+          <span class="health-dot"></span>{{ system_health|default:"OFFLINE" }}
+        </span>
+      </div>
+    </header>
+
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="flash flash-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="content">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+{% else %}
+{% block auth_content %}{% endblock %}
+{% endif %}
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

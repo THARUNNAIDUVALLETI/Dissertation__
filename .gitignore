@@ -1,0 +1,23 @@
+# Virtual environment
+venv/
+
+# Trained model files (large binaries)
+models/saved/*.pkl
+models/saved/*.keras
+models/saved/*.npy
+
+# Raw dataset (large)
+data/raw/*.csv
+data/raw/*.parquet
+
+# Django
+db.sqlite3
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp files
+_quarantine/
+*_backup/
+*.zip
+.DS_Store

@@ -1,0 +1,113 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_title_sub %}Overview{% endblock %}
+
+{% block content %}
+
+<!-- KPI CARDS -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-icon">&#127760;</div>
+    <div class="kpi-label">Total Connections Captured</div>
+    <div class="kpi-value">{{ total_connections }}</div>
+    <div class="kpi-foot">across all analysis runs</div>
+  </div>
+  <div class="kpi-card kpi-card--threat">
+    <div class="kpi-icon">&#9888;</div>
+    <div class="kpi-label">Active Threats</div>
+    <div class="kpi-value">{{ active_threats }}</div>
+    <div class="kpi-foot"><a href="{% url 'dashboard:alerts' %}">view alerts &rarr;</a></div>
+  </div>
+  <div class="kpi-card kpi-card--good">
+    <div class="kpi-icon">&#129302;</div>
+    <div class="kpi-label">Accuracy Score (AI Model)</div>
+    <div class="kpi-value">{{ accuracy_pct }}</div>
+    <div class="kpi-foot">{{ accuracy_model_name|default:"Upload CSV to analyse" }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon">&#128301;</div>
+    <div class="kpi-label">System Health</div>
+    <div class="kpi-value" style="font-size:20px;margin-top:6px">{{ system_health }}</div>
+    <div class="kpi-foot">RF: {% if models_loaded %}&#10003; loaded{% else %}&#10007; missing{% endif %} &middot; AE: {% if autoencoder_loaded %}&#10003; loaded{% else %}&#10007; missing{% endif %}</div>
+  </div>
+</div>
+
+<!-- TRAFFIC + DISTRIBUTION -->
+<div class="chart-grid-main">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Network Traffic Overview</h2>
+      <span class="panel-sub">last 24 hours &mdash; benign vs malicious</span>
+    </div>
+    <div class="chart-wrap chart-wrap--lg"><canvas id="trafficChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Attack Distribution</h2>
+      <span class="panel-sub">verdict breakdown</span>
+    </div>
+    <div class="chart-wrap chart-wrap--lg"><canvas id="distributionChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ALGORITHM COMPARISON (full width, tall) -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Algorithm Accuracy Comparison</h2>
+    <span class="panel-sub">real offline evaluation metrics &mdash; all trained models</span>
+  </div>
+  <div class="chart-wrap" style="height:300px"><canvas id="comparisonChart"></canvas></div>
+</div>
+
+<!-- CVE THREAT INTELLIGENCE -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>&#128272; Threat Intelligence &mdash; CVE Reference</h2>
+    <span class="panel-sub">common vulnerabilities relevant to detected attack patterns</span>
+  </div>
+  <div class="cve-grid" id="cveGrid">
+    <div class="cve-card">
+      <div class="kpi-label" style="text-align:center;padding:20px">Loading threat intelligence...</div>
+    </div>
+  </div>
+</div>
+
+<!-- RECENT ACTIVITY -->
+<div class="panel">
+  <div class="panel-header">
+    <h2>Recent Activity</h2>
+    <a href="{% url 'dashboard:reports' %}" class="panel-link">full reports &rarr;</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="activityTable">
+      <thead>
+        <tr>
+          <th>Timestamp</th><th>Source IP</th><th>Destination IP</th>
+          <th>Verdict</th><th>Severity</th><th>RF Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in recent_detections %}
+        <tr class="sev-{{ d.severity|lower }}">
+          <td class="mono">{{ d.timestamp|date:"Y-m-d H:i:s" }}</td>
+          <td class="mono">{{ d.source_ip }}</td>
+          <td class="mono">{{ d.destination_ip }}</td>
+          <td>{{ d.get_verdict_display }}</td>
+          <td><span class="badge badge-{{ d.severity|lower }}">{{ d.severity }}</span></td>
+          <td class="mono">{{ d.rf_confidence|floatformat:1 }}%</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty-row">No traffic analysed yet &mdash; upload a CSV to get started.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'dashboard/js/dashboard.js' %}"></script>
+{% endblock %}

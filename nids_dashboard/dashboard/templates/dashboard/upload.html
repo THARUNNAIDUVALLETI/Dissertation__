@@ -1,0 +1,46 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Upload CSV{% endblock %}
+{% block page_title %}Upload CSV for Analysis{% endblock %}
+
+{% block content %}
+<section class="panel panel-narrow">
+  <div class="panel-header">
+    <h2>Run the hybrid model over a CSV</h2>
+    <span class="panel-sub">.csv &middot; .parquet &middot; .csv.gz 42 named UNSW-NB15 feature columns, optional label columnmdash; raw UNSW-NB15 files auto-cleaned</span>
+  </div>
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">&#8679;</div>
+    <div class="upload-title">Drop your CSV or Parquet file here</div>
+    <div class="upload-hint">Accepts .csv and .parquet &mdash; raw UNSW-NB15 files auto-cleaned &mdash; up to 1 GB</div>
+  </div>
+  <form method="post" enctype="multipart/form-data" id="uploadForm" style="margin-top:16px">
+    {% csrf_token %}
+    <input type="file" id="fileInput" name="csv_file" accept=".csv,.parquet" style="display:none"
+      onchange="document.getElementById('fileName').textContent=this.files[0]?.name||''; document.getElementById('uploadForm').submit()">
+    <div id="fileName" style="font-size:13px;color:var(--text-muted);margin-bottom:12px"></div>
+    {% if form.csv_file.errors %}<div class="field-error">{{ form.csv_file.errors }}</div>{% endif %}
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Recent Uploads</h2></div>
+  <table class="data-table">
+    <thead><tr><th>File</th><th>Uploaded</th><th>Status</th><th>Rows</th><th>Malicious</th><th>Time</th><th></th></tr></thead>
+    <tbody>
+      {% for b in recent_batches %}
+      <tr>
+        <td>{{ b.filename }}</td>
+        <td class="mono">{{ b.uploaded_at|date:"Y-m-d H:i" }}</td>
+        <td><span class="badge badge-status-{{ b.status|lower }}">{{ b.status }}</span></td>
+        <td>{{ b.row_count }}</td>
+        <td>{{ b.malicious_count }}</td>
+        <td class="mono">{% if b.processing_ms %}{{ b.processing_ms|floatformat:1 }} ms{% endif %}</td>
+        <td><a href="{% url 'dashboard:upload_result' b.id %}">view &rarr;</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="empty-row">No uploads yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

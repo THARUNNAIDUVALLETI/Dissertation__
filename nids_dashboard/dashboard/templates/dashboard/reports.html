@@ -1,0 +1,56 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block content %}
+<section class="panel panel-narrow">
+  <div class="panel-header"><h2>Export</h2></div>
+  <div class="export-actions">
+    <a href="{% url 'dashboard:export_csv' %}" class="btn btn-secondary">Export all detections (CSV)</a>
+    <a href="{% url 'dashboard:export_pdf' %}" class="btn btn-secondary">Export summary report (PDF)</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Model Evaluation Metrics</h2></div>
+  <table class="data-table">
+    <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>FPR</th><th>FNR</th></tr></thead>
+    <tbody>
+      {% for m in metrics %}
+      <tr>
+        <td>{{ m.model_name }}</td>
+        <td>{{ m.accuracy|floatformat:2 }}%</td>
+        <td>{{ m.precision|floatformat:2 }}%</td>
+        <td>{{ m.recall|floatformat:2 }}%</td>
+        <td>{{ m.f1_score|floatformat:3 }}</td>
+        <td>{{ m.false_positive_rate|floatformat:2 }}%</td>
+        <td>{{ m.false_negative_rate|floatformat:2 }}%</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="empty-row">No metrics seeded yet &mdash; run <code>manage.py seed_metrics</code>.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Upload Batches</h2></div>
+  <table class="data-table">
+    <thead><tr><th>File</th><th>Uploaded</th><th>Status</th><th>Rows</th><th>Malicious</th><th></th></tr></thead>
+    <tbody>
+      {% for b in batches %}
+      <tr>
+        <td>{{ b.filename }}</td>
+        <td class="mono">{{ b.uploaded_at|date:"Y-m-d H:i" }}</td>
+        <td><span class="badge badge-status-{{ b.status|lower }}">{{ b.status }}</span></td>
+        <td>{{ b.row_count }}</td>
+        <td>{{ b.malicious_count }}</td>
+        <td><a href="{% url 'dashboard:export_csv' %}?batch={{ b.id }}">export &rarr;</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty-row">No uploads yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

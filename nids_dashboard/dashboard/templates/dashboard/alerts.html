@@ -1,0 +1,41 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block page_title %}Alert Management{% endblock %}
+
+{% block content %}
+<section class="filter-bar">
+  <a href="?status=ACTIVE" class="chip {% if status_filter == 'ACTIVE' %}chip-active{% endif %}">Active</a>
+  <a href="?status=ACKNOWLEDGED" class="chip {% if status_filter == 'ACKNOWLEDGED' %}chip-active{% endif %}">Acknowledged</a>
+  <a href="?status=RESOLVED" class="chip {% if status_filter == 'RESOLVED' %}chip-active{% endif %}">Resolved</a>
+  <a href="?status=ALL" class="chip {% if status_filter == 'ALL' %}chip-active{% endif %}">All</a>
+</section>
+
+<section class="panel">
+  <table class="data-table">
+    <thead><tr><th>Time</th><th>Source IP</th><th>Verdict</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for a in alerts %}
+      <tr class="sev-{{ a.detection.severity|lower }}">
+        <td class="mono">{{ a.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td class="mono">{{ a.detection.source_ip }}</td>
+        <td>{{ a.detection.get_verdict_display }}</td>
+        <td><span class="badge badge-{{ a.detection.severity|lower }}">{{ a.detection.severity }}</span></td>
+        <td><span class="badge badge-status-{{ a.status|lower }}">{{ a.status }}</span></td>
+        <td class="row-actions">
+          {% if a.status == "ACTIVE" %}
+          <form method="post" action="{% url 'dashboard:acknowledge_alert' a.id %}">{% csrf_token %}<button class="btn-link">acknowledge</button></form>
+          <form method="post" action="{% url 'dashboard:resolve_alert' a.id %}">{% csrf_token %}<button class="btn-link">resolve</button></form>
+          {% elif a.status == "ACKNOWLEDGED" %}
+          <form method="post" action="{% url 'dashboard:resolve_alert' a.id %}">{% csrf_token %}<button class="btn-link">resolve</button></form>
+          {% else %}
+          <span class="muted">handled by {{ a.handled_by|default:"—" }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty-row">No alerts in this view.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

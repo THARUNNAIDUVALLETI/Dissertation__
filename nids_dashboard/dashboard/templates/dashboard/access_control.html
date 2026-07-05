@@ -1,0 +1,59 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Access Control{% endblock %}
+{% block page_title %}Access Control{% endblock %}
+
+{% block content %}
+{% if is_admin %}
+<section class="panel panel-narrow">
+  <div class="panel-header"><h2>Block an IP</h2></div>
+  <form method="post" action="{% url 'dashboard:block_ip' %}" class="upload-form">
+    {% csrf_token %}
+    <label>IP address <input type="text" name="ip_address" placeholder="203.0.113.42" required></label>
+    <label>Reason <input type="text" name="reason" placeholder="Confirmed attack source"></label>
+    <button type="submit" class="btn btn-primary">Block IP</button>
+  </form>
+</section>
+{% else %}
+<section class="panel panel-narrow">
+  <p class="hint">Blocking and unblocking IPs requires administrator privileges. Contact a SOC admin to make changes.</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-header"><h2>Currently Blocked</h2></div>
+  <table class="data-table">
+    <thead><tr><th>IP Address</th><th>Reason</th><th>Blocked By</th><th>Blocked At</th>{% if is_admin %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+      {% for b in blocked %}
+      <tr>
+        <td class="mono">{{ b.ip_address }}</td>
+        <td>{{ b.reason|default:"—" }}</td>
+        <td>{{ b.blocked_by|default:"—" }}</td>
+        <td class="mono">{{ b.blocked_at|date:"Y-m-d H:i" }}</td>
+        {% if is_admin %}
+        <td>
+          <form method="post" action="{% url 'dashboard:unblock_ip' b.id %}">{% csrf_token %}<button class="btn-link">unblock</button></form>
+        </td>
+        {% endif %}
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="empty-row">No IPs currently blocked.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if lifted %}
+<section class="panel">
+  <div class="panel-header"><h2>Recently Unblocked</h2></div>
+  <table class="data-table">
+    <thead><tr><th>IP Address</th><th>Reason</th><th>Blocked At</th></tr></thead>
+    <tbody>
+      {% for b in lifted %}
+      <tr><td class="mono">{{ b.ip_address }}</td><td>{{ b.reason|default:"—" }}</td><td class="mono">{{ b.blocked_at|date:"Y-m-d H:i" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}
