@@ -1,6 +1,5 @@
 # Hybrid AI-Based Network Intrusion Detection System
 
-Masters Dissertation — Aiswariya Akhil (E4318387), CIS4055, Supervisor: Nauman Issar
 
 ## What's in this zip
 
