@@ -1417,3 +1417,648 @@ import csv
       if (modelAcc) {
         modelAcc.textContent = `${(d.model_accuracy * 100).toFixed(1)}%`;
       }
+
+      const sysHealth = document.getElementById('systemHealthValue');
+      if (sysHealth) {
+        sysHealth.textContent = d.system_health || '--';
+
+        // Update color based on health status
+        const kpiCard = document.getElementById('kpiSystemHealth');
+        if (kpiCard) {
+          kpiCard.className = 'kpi-card';
+          if (d.system_health === 'healthy') {
+            kpiCard.classList.add('kpi-card--good');
+          } else if (d.system_health === 'degraded') {
+            kpiCard.classList.add('kpi-card--threat'); // Using threat color
+  for warning
+          } else {
+            kpiCard.classList.add('kpi-card--threat');
+          }
+        }
+      }
+
+      // Update new KPIs
+      const threatRate = document.getElementById('threatRateValue');
+      if (threatRate) {
+        threatRate.textContent = `${(d.threat_rate * 100).toFixed(1)}%`;
+      }
+
+      const fpr = document.getElementById('falsePositiveRateValue');
+      if (fpr) {
+        fpr.textContent = `${(d.false_positive_rate * 100).toFixed(2)}%`;
+      }
+
+      const avgConf = document.getElementById('avgConfidenceValue');
+      if (avgConf) {
+        avgConf.textContent = `${(d.avg_confidence * 100).toFixed(1)}%`;
+      }
+
+      const procSpeed = document.getElementById('processingSpeedValue');
+      if (procSpeed) {
+        procSpeed.textContent = `${d.avg_processing_ms?.toFixed(1) || '--'}
+  ms`;
+      }
+
+    } catch(e) {
+      console.error('Error updating enhanced KPIs:', e);
+    }
+  }
+
+  /* ── Recent Activity table (legacy) ── */
+  async function loadActivity() {
+    const d = await fetchJSON('/dashboard/api/recent-activity/');
+    const tbody = document.querySelector('#activityTable tbody');
+    if (!tbody || !d.rows.length) return;
+    const sevClass = { LOW:'low', MEDIUM:'medium', HIGH:'high',
+  CRITICAL:'critical' };
+    tbody.innerHTML = d.rows.map(r => `
+      <tr class="sev-${(r.severity||'low').toLowerCase()}">
+        <td class="mono">${r.timestamp}</td>
+        <td class="mono">${r.source_ip}</td>
+        <td class="mono">${r.destination_ip||'—'}</td>
+        <td>${r.verdict}</td>
+        <td><span class="badge
+  badge-${(r.severity||'low').toLowerCase()}">${r.severity}</span></td>
+        <td class="mono">${r.confidence}%</td>
+      </tr>`).join('');
+  }
+
+  /* ── CVE Threat Intelligence panel ── */
+  const CVE_DB = {
+    CONFIRMED_ATTACK: [
+      { id:'CVE-2017-0144', name:'EternalBlue (MS17-010)', score:9.8,
+  level:'critical', desc:'Remote code execution via SMB. Used by WannaCry
+  and NotPetya ransomware.' },
+      { id:'CVE-2021-44228', name:'Log4Shell', score:10.0, level:'critical',
+  desc:'Critical RCE in Apache Log4j via JNDI injection. Affects millions
+  of Java apps.' },
+      { id:'CVE-2021-26855', name:'ProxyLogon (Exchange)', score:9.8,
+  level:'critical', desc:'Microsoft Exchange Server SSRF enabling
+  unauthenticated RCE.' },
+    ],
+    KNOWN_ATTACK: [
+      { id:'CVE-2022-30190', name:'Follina (MSDT)', score:7.8, level:'high',
+  desc:'Microsoft Windows MSDT RCE exploitable via Office documents without
+  macros.' },
+      { id:'CVE-2019-19781', name:'Citrix ADC RCE', score:9.8,
+  level:'critical', desc:'Path traversal in Citrix Application Delivery
+  Controller allowing RCE.' },
+      { id:'CVE-2020-1472', name:'Zerologon', score:10.0, level:'critical',
+  desc:'Privilege escalation via Netlogon allowing domain controller
+  compromise.' },
+    ],
+    ZERO_DAY: [
+      { id:'CVE-UNKNOWN-ZD1', name:'Zero-Day Anomaly Detected', score:8.5,
+  level:'high', desc:'Traffic pattern deviates significantly from baseline
+  normal behaviour. No known signature.' },
+      { id:'CVE-2023-23397', name:'Outlook Zero-Click RCE', score:9.8,
+  level:'critical', desc:'Microsoft Outlook elevation of privilege,
+  exploitable with no user interaction.' },
+      { id:'CVE-2022-41082', name:'ProxyNotShell (Exchange)', score:8.8,
+  level:'high', desc:'Authenticated RCE in Microsoft Exchange via SSRF +
+  deserialization chain.' },
+    ],
+    BENIGN: [],
+  };
+
+  async function loadCVE() {
+    const grid = document.getElementById('cveGrid');
+    if (!grid) return;
+    try {
+      const d = await fetchJSON('/dashboard/api/attack-distribution/');
+      // Pick CVE set based on highest-priority verdict with non-zero count
+      const order = ['CONFIRMED_ATTACK','KNOWN_ATTACK','ZERO_DAY','BENIGN'];
+      const labelMap = {
+        'Confirmed Attack':'CONFIRMED_ATTACK','Known Attack':'KNOWN_ATTACK',
+        'Zero-Day Anomaly':'ZERO_DAY','Benign':'BENIGN'
+      };
+      let cves = CVE_DB.CONFIRMED_ATTACK;
+      for (const key of order) {
+        const idx = d.labels.findIndex(l => labelMap[l] === key);
+        if (idx >= 0 && d.counts[idx] > 0) { cves = CVE_DB[key]; break; }
+      }
+      if (!cves.length) {
+        grid.innerHTML = `<div class="cve-card"
+  style="grid-column:1/-1"><div class="kpi-label"
+  style="text-align:center;padding:20px">No threats detected &mdash; upload
+  a CSV to populate threat intelligence.</div></div>`;
+        return;
+      }
+      grid.innerHTML = cves.map(c => `
+        <div class="cve-card">
+          <div class="cve-id">${c.id}</div>
+          <div class="cve-name">${c.name}</div>
+          <div class="cve-score-row">
+            <span class="cve-score cve-score-${c.level}">CVSS
+  ${c.score}</span>
+            <span class="badge
+  badge-${c.level}">${c.level.toUpperCase()}</span>
+          </div>
+          <div class="cve-desc">${c.desc}</div>
+        </div>`).join('');
+    } catch(e) {
+      grid.innerHTML = `<div class="cve-card"><div class="cve-desc">Could
+  not load threat intelligence: ${e.message}</div></div>`;
+    }
+  }
+
+  /* ── Decision Explanation Modal ── */
+  async function showExplanation(detectionId) {
+    try {
+      const d = await fetchJSON(`/dashboard/api/decision-explanation/?detect
+  ion_id=${detectionId}`);
+      if (!d.success) {
+        alert('Failed to load explanation: ' + d.error);
+        return;
+      }
+
+      // Create and show modal
+      const modalHTML = `
+        <div class="modal-overlay" id="explanationModal">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Decision Explanation</h3>
+              <button class="btn-link"
+  onclick="closeExplanationModal()">×</button>
+            </div>
+            <div class="modal-body">
+              <p><strong>Detection ID:</strong>
+  ${d.explanation.detection_id}</p>
+              <p><strong>Verdict:</strong> <span class="badge badge-${d.expl
+  anation.verdict_code.toLowerCase()}">${d.explanation.verdict}</span></p>
+              <p><strong>Confidence:</strong> ${(d.explanation.confidence *
+  100).toFixed(1)}%</p>
+              <p><strong>Anomaly Score:</strong>
+  ${d.explanation.anomaly_score.toFixed(4)}</p>
+              <p><strong>Is Anomaly:</strong> ${d.explanation.is_anomaly ?
+  'Yes' : 'No'}</p>
+
+              <h4>Contributing Factors:</h4>
+              <ul class="explanation-list">
+                ${d.explanation.contributing_factors.map(factor => `
+                  <li>
+                    <strong>${factor.factor}</strong> <span
+  class="impact-${factor.impact}">(${factor.impact})</span><br>
+                    <small>${factor.description}</small>
+                  </li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('explanationModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Add new modal
+      document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+      // Add styles if not already present
+      if (!document.getElementById('explanationModalStyles')) {
+        const style = document.createElement('style');
+        style.id = 'explanationModalStyles';
+        style.textContent = `
+          .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+          }
+          .modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+          }
+          .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+          }
+          .modal-header h3 {
+            margin: 0;
+            color: var(--text);
+          }
+          .modal-body {
+            padding: 20px;
+          }
+          .explanation-list {
+            margin: 12px 0;
+            padding-left: 20px;
+          }
+          .explanation-list li {
+            margin: 8px 0;
+            line-height: 1.4;
+          }
+          .impact-high { color: var(--critical); font-weight: 600; }
+          .impact-medium { color: var(--medium); font-weight: 500; }
+          .impact-low { color: var(--low); font-weight: 500; }
+          .btn-link {
+            background: none;
+            border: none;
+            color: var(--brand);
+            font-size: 12.5px;
+            cursor: pointer;
+            padding: 0;
+          }
+          .btn-link:hover { text-decoration: underline; }
+        `;
+        document.head.appendChild(style);
+      }
+    } catch(e) {
+      alert('Error loading explanation: ' + e.message);
+    }
+  }
+
+  function closeExplanationModal() {
+    const modal = document.getElementById('explanationModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  /* ── Refresh all ── */
+  async function refreshAll() {
+    await Promise.allSettled([
+      loadTraffic(),
+      loadDistribution(),
+      loadComparison(),
+      loadActivity(),
+      loadCVE(),
+      loadLiveDetections(),
+      loadRecentAlerts(),
+      loadProcessingSpeed(),
+      updateEnhancedKPIs()
+    ]);
+  }
+
+  /* Initial load and interval */
+  document.addEventListener('DOMContentLoaded', () => {
+    refreshAll();
+    setInterval(refreshAll, 20000); // refresh every 20s
+  });
+
+  5. nids_dashboard/dashboard/static/dashboard/js/detection_summary.js
+  (CREATE NEW FILE)
+
+  /* Detection Summary Page Specific JavaScript */
+
+  let verdictChart, severityChart;
+
+  async function loadDetectionSummary() {
+    try {
+      const [overview, verdictDist, severityDist, highRisk] = await
+  Promise.all([
+        fetchJSON('/dashboard/api/detection-summary/'),
+        fetchJSON('/dashboard/api/verdict-distribution/'),
+        fetchJSON('/dashboard/api/severity-distribution/'),
+        fetchJSON('/dashboard/api/high-risk-detections/')
+      ]);
+
+      // Update overview metrics
+      if (overview.success) {
+        document.getElementById('totalDetections').textContent =
+  overview.total_detections?.toLocaleString() || '--';
+        document.getElementById('threatRate').textContent =
+  `${(overview.threat_rate * 100).toFixed(1)}%`;
+        document.getElementById('avgConfidence').textContent =
+  `${(overview.avg_confidence * 100).toFixed(1)}%`;
+        document.getElementById('fpr').textContent =
+  `${(overview.false_positive_rate * 100).toFixed(2)}%`;
+      }
+
+      // Update verdict distribution table
+      if (verdictDist.success && verdictDist.distribution) {
+        const tbody = document.querySelector('#verdictTable tbody');
+        tbody.innerHTML = verdictDist.distribution.map(item => `
+          <tr>
+            <td>${item.verdict}</td>
+            <td>${item.count.toLocaleString()}</td>
+            <td>${(item.percentage * 100).toFixed(1)}%</td>
+          </tr>`).join('');
+      }
+
+      // Update severity distribution table
+      if (severityDist.success && severityDist.distribution) {
+        const tbody = document.querySelector('#severityTable tbody');
+        tbody.innerHTML = severityDist.distribution.map(item => `
+          <tr class="sev-${item.severity.toLowerCase()}">
+            <td>${item.severity}</td>
+            <td>${item.count.toLocaleString()}</td>
+            <td>${(item.percentage * 100).toFixed(1)}%</td>
+          </tr>`).join('');
+      }
+
+      // Update high-risk detections table
+      if (highRisk.success && highRisk.detections) {
+        const tbody = document.querySelector('#highRiskTable tbody');
+        if (highRisk.detections.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No
+  high-risk detections in last 24h</td></tr>';
+        } else {
+          tbody.innerHTML = highRisk.detections.map(det => `
+            <tr class="sev-${det.severity.toLowerCase()}">
+              <td class="mono">${det.timestamp}</td>
+              <td class="mono">${det.source_ip}</td>
+              <td class="mono">${det.destination_ip}</td>
+              <td>${det.verdict}</td>
+              <td><span class="badge
+  badge-${det.severity.toLowerCase()}">${det.severity}</span></td>
+              <td class="mono">${det.confidence}%</td>
+            </tr>`).join('');
+        }
+      }
+
+      // Update charts
+      if (verdictDist.success && verdictDist.chartData) {
+        updateVerdictChart(verdictDist.chartData);
+      }
+
+      if (severityDist.success && severityDist.chartData) {
+        updateSeverityChart(severityDist.chartData);
+      }
+
+    } catch(e) {
+      console.error('Error loading detection summary:', e);
+      // Show error in UI
+      document.getElementById('totalDetections').textContent = 'Error';
+    }
+  }
+
+  function updateVerdictChart(data) {
+    const ctx = document.getElementById('verdictDistributionChart');
+    if (!ctx) return;
+
+    if (verdictChart) {
+      verdictChart.data = {
+        labels: data.labels,
+        datasets: [{
+          data: data.counts,
+          backgroundColor: [
+            getComputedStyle(document.documentElement).getPropertyValue('--l
+  ow').trim(),
+            getComputedStyle(document.documentElement).getPropertyValue('--h
+  igh').trim(),
+            getComputedStyle(document.documentElement).getPropertyValue('--m
+  edium').trim(),
+            getComputedStyle(document.documentElement).getPropertyValue('--c
+  ritical').trim()
+          ],
+          borderWidth: 0
+        }]
+      };
+      verdictChart.update();
+    } else {
+      verdictChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            data: data.counts,
+            backgroundColor: [
+              getComputedStyle(document.documentElement).getPropertyValue('-
+  -low').trim(),
+              getComputedStyle(document.documentElement).getPropertyValue('-
+  -high').trim(),
+              getComputedStyle(document.documentElement).getPropertyValue('-
+  -medium').trim(),
+              getComputedStyle(document.documentElement).getPropertyValue('-
+  -critical').trim()
+            ],
+            borderWidth: 0,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                boxWidth: 12,
+                boxHeight: 12,
+                padding: 12
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: ${ctx.parsed} (${(ctx.parsed /
+  ctx.dataset._meta[0].total * 100).toFixed(1)}%)`
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  function updateSeverityChart(data) {
+    const ctx = document.getElementById('severityTrendChart');
+    if (!ctx) return;
+
+    if (severityChart) {
+      severityChart.data = {
+        labels: data.labels,
+        datasets: [{
+          label: 'Count',
+          data: data.counts,
+          backgroundColor: 'rgba(0,212,255,0.2)',
+          borderColor: getComputedStyle(document.documentElement).getPropert
+  yValue('--brand').trim(),
+          borderWidth: 2,
+          tension: 0.3,
+          fill: true
+        }]
+      };
+      severityChart.update();
+    } else {
+      severityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: 'Count',
+            data: data.counts,
+            backgroundColor: 'rgba(0,212,255,0.2)',
+            borderColor: getComputedStyle(document.documentElement).getPrope
+  rtyValue('--brand').trim(),
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: getComputedStyle(document.documentElement)
+  .getPropertyValue('--brand').trim(),
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: getComputedStyle(document.documentElement).getPropert
+  yValue('--grid').trim()
+              }
+            },
+            x: {
+              grid: {
+                display: false
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}:
+  ${ctx.parsed.value.toLocaleString()} detections`
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // Initialize charts when page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    loadDetectionSummary();
+    // Refresh every 5 minutes for this detailed view
+    setInterval(loadDetectionSummary, 300000);
+  });
+
+  6. nids_dashboard/dashboard/templates/dashboard/detection_summary.html
+  (CREATE NEW FILE)
+
+  {% extends "dashboard/base.html" %}
+  {% load static %}
+  {% block title %}Detection Summary{% endblock %}
+  {% block page_title %}Detection Analytics{% endblock %}
+  {% block page_title_sub %}Comprehensive analysis of network threat
+  detection{% endblock %}
+
+  {% block content %}
+  <!-- Key Metrics Row -->
+  <div class="kpi-grid" style="margin-bottom: 24px;">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Detections</div>
+      <div class="kpi-value" id="totalDetections">--</div>
+      <div class="kpi-footer">all time</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Threat Detection Rate</div>
+      <div class="kpi-value" id="threatRate">--%</div>
+      <div class="kpi-footer">malicious vs benign</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Avg Confidence</div>
+      <div class="kpi-value" id="avgConfidence">--%</div>
+      <div class="kpi-footer">model confidence</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">False Positive Rate</div>
+      <div class="kpi-value" id="fpr">--%</div>
+      <div class="kpi-footer">estimated</div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="chart-grid-main" style="margin-bottom: 24px;">
+    <div class="chart-wrap">
+      <canvas id="verdictDistributionChart"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="severityTrendChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Detailed Tables -->
+  <section class="panel">
+    <div class="panel-header">
+      <h2>Detection Details</h2>
+      <div class="panel-sub">Breakdown by verdict and severity</div>
+    </div>
+
+    <div class="chart-grid-sub">
+      <div class="table-wrap">
+        <h3>Verdict Distribution</h3>
+        <table class="data-table" id="verdictTable">
+          <thead>
+            <tr>
+              <th>Verdict</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" class="empty-row">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <h3>Severity Distribution</h3>
+        <table class="data-table" id="severityTable">
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" class="empty-row">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent High-Risk Detections -->
+  <section class="panel">
+    <div class="panel-header">
+      <h2>High-Risk Detections (Last 24h)</h2>
+      <div class="panel-sub">Confirmed attacks and high-confidence
+  anomalies</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" id="highRiskTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Source IP</th>
+            <th>Dest IP</th>
+            <th>Verdict</th>
+            <th>Severity</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="6" class="empty-row">Loading high-risk
+  detections...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endblock %}
+
+  {% block extra_js %}
+  <script src="{% static 'dashboard/js/detection_summary.js' %}"></script>
+  {% endblock %}
