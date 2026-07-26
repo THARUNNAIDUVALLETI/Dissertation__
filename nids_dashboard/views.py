@@ -2062,3 +2062,547 @@ import csv
   {% block extra_js %}
   <script src="{% static 'dashboard/js/detection_summary.js' %}"></script>
   {% endblock %}
+   NEW FEATURE API ENDPOINTS
+      378 +# --------------------------------------------------------
+          +-------------------
+      379 +
+      380 +@login_required
+      381 +def api_live_detections(request):
+      382 +    """API endpoint for live detection feed - returns late
+          +st detections for real-time panel"""
+      383 +    try:
+      384 +        # Get limit parameter (default 20 for live feed)
+      385 +        limit = int(request.GET.get('limit', 20))
+      386 +
+      387 +        # Get latest detections with related batch info
+      388 +        detections = Detection.objects.select_related('bat
+          +ch').order_by('-timestamp')[:limit]
+      389 +
+      390 +        # Format data for JSON response
+      391 +        rows = [
+      392 +            {
+      393 +                "id": d.id,
+      394 +                "timestamp": d.timestamp.strftime("%Y-%m-%
+          +d %H:%M:%S"),
+      395 +                "source_ip": d.source_ip,
+      396 +                "destination_ip": d.destination_ip,
+      397 +                "source_port": d.source_port,
+      398 +                "destination_port": d.destination_port,
+      399 +                "verdict": d.get_verdict_display(),
+      400 +                "verdict_code": d.verdict,
+      401 +                "severity": d.severity,
+      402 +                "severity_code": d.severity,
+      403 +                "confidence": round(d.rf_confidence * 100,
+          + 1),
+      404 +                "reconstruction_error": round(d.reconstruc
+          +tion_error, 4),
+      405 +                "is_anomaly": d.is_anomaly,
+      406 +                "true_label": d.true_label,
+      407 +                "batch_filename": d.batch.filename if d.ba
+          +tch else None,
+      408 +                "processing_time_ms": d.batch.processing_m
+          +s if d.batch and d.batch.processing_ms else None
+      409 +            }
+      410 +            for d in detections
+      411 +        ]
+      412 +
+      413 +        return JsonResponse({
+      414 +            "success": True,
+      415 +            "count": len(rows),
+      416 +            "detections": rows,
+      417 +            "last_updated": timezone.now().strftime("%Y-%m
+          +-%d %H:%M:%S")
+      418 +        })
+      419 +
+      420 +    except Exception as e:
+      421 +        return JsonResponse({
+      422 +            "success": False,
+      423 +            "error": str(e)
+      424 +        }, status=500)
+      425 +
+      426 +
+      427 +@login_required
+      428 +def api_recent_alerts(request):
+      429 +    """API endpoint for recent alerts - returns latest ale
+          +rts for dashboard preview"""
+      430 +    try:
+      431 +        # Get limit parameter (default 5 for dashboard pre
+          +view)
+      432 +        limit = int(request.GET.get('limit', 5))
+      433 +
+      434 +        # Get latest alerts with related detection and bat
+          +ch info
+      435 +        alerts = Alert.objects.select_related('detection__
+          +batch').order_by('-created_at')[:limit]
+      436 +
+      437 +        # Format data for JSON response
+      438 +        rows = [
+      439 +            {
+      440 +                "id": a.id,
+      441 +                "created_at": a.created_at.strftime("%Y-%m
+          +-%d %H:%M:%S"),
+      442 +                "source_ip": a.detection.source_ip,
+      443 +                "destination_ip": a.detection.destination_
+          +ip,
+      444 +                "verdict": a.detection.get_verdict_display
+          +(),
+      445 +                "verdict_code": a.detection.verdict,
+      446 +                "severity": a.detection.severity,
+      447 +                "severity_code": a.detection.severity,
+      448 +                "status": a.status,
+      449 +                "confidence": round(a.detection.rf_confide
+          +nce * 100, 1),
+      450 +                "is_acknowledged": a.status == Alert.STATU
+          +S_ACKNOWLEDGED,
+      451 +                "is_resolved": a.status == Alert.STATUS_RE
+          +SOLVED,
+      452 +                "handled_by": a.handled_by.username if a.h
+          +andled_by else None,
+      453 +                "handled_at": a.handled_at.strftime("%Y-%m
+          +-%d %H:%M:%S") if a.handled_at else None
+      454 +            }
+      455 +            for a in alerts
+      456 +        ]
+      457 +
+      458 +        return JsonResponse({
+      459 +            "success": True,
+      460 +            "count": len(rows),
+      461 +            "alerts": rows,
+      462 +            "last_updated": timezone.now().strftime("%Y-%m
+          +-%d %H:%M:%S")
+      463 +        })
+      464 +    except Exception as e:
+      465 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      466 +
+      467 +
+      468 +@login_required
+      469 +def api_processing_speed(request):
+      470 +    """API endpoint for processing speed metrics"""
+      471 +    try:
+      472 +        # Get recent batches for performance metrics
+      473 +        recent_batches = UploadBatch.objects.filter(
+      474 +            status=UploadBatch.STATUS_DONE,
+      475 +            processing_ms__isnull=False
+      476 +        ).order_by('-uploaded_at')[:10]
+      477 +
+      478 +        if not recent_batches.exists():
+      479 +            return JsonResponse({
+      480 +                "success": True,
+      481 +                "current_batch": None,
+      482 +                "recent_avg_ms": None,
+      483 +                "recent_avg_per_record": None,
+      484 +                "batches_per_minute": None,
+      485 +                "total_processed": UploadBatch.objects.fil
+          +ter(status=UploadBatch.STATUS_DONE).count()
+      486 +            })
+      487 +
+      488 +        # Calculate metrics
+      489 +        processing_times = [b.processing_ms for b in recen
+          +t_batches if b.processing_ms]
+      490 +        total_records = sum(b.row_count for b in recent_ba
+          +tches)
+      491 +        total_time = sum(processing_times)
+      492 +
+      493 +        avg_processing_ms = sum(processing_times) / len(pr
+          +ocessing_times) if processing_times else 0
+      494 +        avg_per_record = total_time / total_records if tot
+          +al_records > 0 else 0
+      495 +
+      496 +        # Calculate batches per minute (based on last 10 m
+          +inutes)
+      497 +        ten_minutes_ago = timezone.now() - timezone.timede
+          +lta(minutes=10)
+      498 +        recent_count = UploadBatch.objects.filter(
+      499 +            uploaded_at__gte=ten_minutes_ago,
+      500 +            status=UploadBatch.STATUS_DONE
+      501 +        ).count()
+      502 +        batches_per_minute = (recent_count / 10) * 60 if r
+          +ecent_count > 0 else 0
+      503 +
+      504 +        # Get latest batch info
+      505 +        latest_batch = recent_batches.first()
+      506 +
+      507 +        return JsonResponse({
+      508 +            "success": True,
+      509 +            "current_batch": {
+      510 +                "filename": latest_batch.filename,
+      511 +                "processing_ms": round(latest_batch.proces
+          +sing_ms, 1),
+      512 +                "row_count": latest_batch.row_count,
+      513 +                "per_record_ms": round(latest_batch.proces
+          +sing_ms / max(latest_batch.row_count, 1), 2),
+      514 +                "uploaded_at": latest_batch.uploaded_at.st
+          +rftime("%H:%M:%S")
+      515 +            },
+      516 +            "recent_avg_ms": round(avg_processing_ms, 1),
+      517 +            "recent_avg_per_record": round(avg_per_record,
+          + 2),
+      518 +            "batches_per_minute": round(batches_per_minute
+          +, 1),
+      519 +            "total_processed": UploadBatch.objects.filter(
+          +status=UploadBatch.STATUS_DONE).count(),
+      520 +            "last_updated": timezone.now().strftime("%Y-%m
+          +-%d %H:%M:%S")
+      521 +        })
+      522 +    except Exception as e:
+      523 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      524 +
+      525 +
+      526 +@login_required
+      527 +def api_enhanced_kpis(request):
+      528 +    """API endpoint for enhanced KPI metrics"""
+      529 +    try:
+      530 +        total_detections = Detection.objects.count()
+      531 +        active_threats = Alert.objects.filter(status=Alert
+          +.STATUS_ACTIVE).count()
+      532 +
+      533 +        # Get latest model accuracy from evaluation metric
+          +s
+      534 +        latest_metric = EvaluationMetric.objects.order_by(
+          +'-recorded_at').first()
+      535 +        model_accuracy = latest_metric.accuracy if latest_
+          +metric else 0
+      536 +
+      537 +        # System health based on recent processing success
+      538 +        recent_batches = UploadBatch.objects.filter(
+      539 +            uploaded_at__gte=timezone.now() - timezone.tim
+          +edelta(hours=1)
+      540 +        ).order_by('-uploaded_at')[:5]
+      541 +
+      542 +        failed_recent = recent_batches.filter(status=Uploa
+          +dBatch.STATUS_FAILED).count()
+      543 +        total_recent = len(recent_batches)
+      544 +        system_health = 'healthy'
+      545 +        if total_recent > 0:
+      546 +            failure_rate = failed_recent / total_recent
+      547 +            if failure_rate > 0.5:
+      548 +                system_health = 'offline'
+      549 +            elif failure_rate > 0.2:
+      550 +                system_health = 'degraded'
+      551 +
+      552 +        # Threat detection rate
+      553 +        threat_detections = Detection.objects.exclude(verd
+          +ict=Detection.VERDICT_BENIGN).count()
+      554 +        threat_rate = threat_detections / max(total_detect
+          +ions, 1)
+      555 +
+      556 +        # False positive rate (benign but flagged as anoma
+          +lous)
+      557 +        false_positives = Detection.objects.filter(
+      558 +            verdict=Detection.VERDICT_BENIGN,
+      559 +            is_anomaly=True
+      560 +        ).count()
+      561 +        false_positive_rate = false_positives / max(total_
+          +detections, 1)
+      562 +
+      563 +        # Average confidence
+      564 +        avg_confidence = Detection.objects.exclude(
+      565 +            rf_confidence__isnull=True
+      566 +        ).aggregate(avg=Avg('rf_confidence'))['avg'] or 0
+      567 +
+      568 +        # Average processing time
+      569 +        avg_processing = UploadBatch.objects.filter(
+      570 +            status=UploadBatch.STATUS_DONE,
+      571 +            processing_ms__isnull=False
+      572 +        ).aggregate(avg=Avg('processing_ms'))['avg'] or 0
+      573 +
+      574 +        return JsonResponse({
+      575 +            "success": True,
+      576 +            "total_connections": total_detections,
+      577 +            "active_threats": active_threats,
+      578 +            "model_accuracy": model_accuracy,
+      579 +            "system_health": system_health,
+      580 +            "threat_rate": threat_rate,
+      581 +            "false_positive_rate": false_positive_rate,
+      582 +            "avg_confidence": avg_confidence,
+      583 +            "avg_processing_ms": avg_processing
+      584 +        })
+      585 +    except Exception as e:
+      586 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      587 +
+      588 +
+      589 +@login_required
+      590 +def api_decision_explanation(request):
+      591 +    """API endpoint for explaining ML model decisions"""
+      592 +    try:
+      593 +        detection_id = request.GET.get('detection_id')
+      594 +        if not detection_id:
+      595 +            return JsonResponse({"success": False, "error"
+          +: "detection_id required"}, status=400)
+      596 +
+      597 +        detection = get_object_or_404(Detection, id=detect
+          +ion_id)
+      598 +
+      599 +        # Build explanation based on available data (simpl
+          +ified SHAP-like)
+      600 +        explanation = {
+      601 +            "detection_id": detection.id,
+      602 +            "verdict": detection.get_verdict_display(),
+      603 +            "verdict_code": detection.verdict,
+      604 +            "confidence": detection.rf_confidence,
+      605 +            "anomaly_score": detection.reconstruction_erro
+          +r,
+      606 +            "is_anomaly": detection.is_anomaly,
+      607 +            "contributing_factors": []
+      608 +        }
+      609 +
+      610 +        # Verdict-based factors
+      611 +        if detection.verdict == Detection.VERDICT_CONFIRME
+          +D_ATTACK:
+      612 +            explanation["contributing_factors"].append({
+      613 +                "factor": "High confidence RF prediction +
+          + Anomaly detection",
+      614 +                "impact": "high",
+      615 +                "description": "Both Random Forest and Aut
+          +oencoder detected threat"
+      616 +            })
+      617 +        elif detection.verdict == Detection.VERDICT_KNOWN_
+          +ATTACK:
+      618 +            explanation["contributing_factors"].append({
+      619 +                "factor": "Strong RF prediction",
+      620 +                "impact": "high",
+      621 +                "description": "Random Forest confidently
+          +classified as known attack"
+      622 +            })
+      623 +        elif detection.verdict == Detection.VERDICT_ZERO_D
+          +AY:
+      624 +            explanation["contributing_factors"].append({
+      625 +                "factor": "Anomaly detection",
+      626 +                "impact": "high",
+      627 +                "description": "Autoencoder detected signi
+          +ficant deviation from normal"
+      628 +            })
+      629 +        else:  # BENIGN
+      630 +            explanation["contributing_factors"].append({
+      631 +                "factor": "Low RF confidence + Normal patt
+          +ern",
+      632 +                "impact": "low",
+      633 +                "description": "Random Forest low confiden
+          +ce + normal reconstruction"
+      634 +            })
+      635 +
+      636 +        # Confidence-based explanation
+      637 +        if detection.rf_confidence > 0.8:
+      638 +            explanation["contributing_factors"].append({
+      639 +                "factor": "High model confidence",
+      640 +                "impact": "medium",
+      641 +                "description": f"RF confidence {detection.
+          +rf_confidence:.2f} indicates strong prediction"
+      642 +            })
+      643 +        elif detection.rf_confidence < 0.4:
+      644 +            explanation["contributing_factors"].append({
+      645 +                "factor": "Low model confidence",
+      646 +                "impact": "medium",
+      647 +                "description": f"RF confidence {detection.
+          +rf_confidence:.2f} indicates uncertainty"
+      648 +            })
+      649 +
+      650 +        # Anomaly-based explanation
+      651 +        if detection.is_anomaly:
+      652 +            explanation["contributing_factors"].append({
+      653 +                "factor": "Anomalous reconstruction",
+      654 +                "impact": "medium" if detection.verdict ==
+          + Detection.VERDICT_BENIGN else "high",
+      655 +                "description": f"Reconstruction error {det
+          +ection.reconstruction_error:.4f} exceeds threshold"
+      656 +            })
+      657 +
+      658 +        return JsonResponse({
+      659 +            "success": True,
+      660 +            "explanation": explanation
+      661 +        })
+      662 +    except Exception as e:
+      663 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      664 +
+      665 +
+      666 +# ==================== DETECTION SUMMARY PAGE ENDPOINTS ==
+          +==================
+      667 +
+      668 +@login_required
+      669 +def api_detection_summary(request):
+      670 +    """API endpoint for detection summary overview statist
+          +ics"""
+      671 +    try:
+      672 +        total_detections = Detection.objects.count()
+      673 +        threat_detections = Detection.objects.exclude(verd
+          +ict=Detection.VERDICT_BENIGN).count()
+      674 +        threat_rate = threat_detections / max(total_detect
+          +ions, 1)
+      675 +
+      676 +        # Average confidence (non-null only)
+      677 +        avg_confidence = Detection.objects.exclude(
+      678 +            rf_confidence__isnull=True
+      679 +        ).aggregate(avg=Avg('rf_confidence'))['avg'] or 0
+      680 +
+      681 +        # Estimated false positive rate
+      682 +        false_positive = Detection.objects.filter(
+      683 +            verdict=Detection.VERDICT_BENIGN,
+      684 +            is_anomaly=True
+      685 +        ).count()
+      686 +        fpr = false_positive / max(total_detections, 1)
+      687 +
+      688 +        return JsonResponse({
+      689 +            "success": True,
+      690 +            "total_detections": total_detections,
+      691 +            "threat_rate": threat_rate,
+      692 +            "avg_confidence": avg_confidence,
+      693 +            "false_positive_rate": fpr
+      694 +        })
+      695 +    except Exception as e:
+      696 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      697 +
+      698 +
+      699 +@login_required
+      700 +def api_verdict_distribution(request):
+      701 +    """API endpoint for verdict distribution data"""
+      702 +    try:
+      703 +        # Get distribution by verdict
+      704 +        verdicts = Detection.objects.values('verdict').ann
+          +otate(
+      705 +            count=Count('id')
+      706 +        ).order_by('-count')
+      707 +
+      708 +        # Get verdict choices for labels
+      709 +        verdict_choices = dict(Detection.VERDICT_CHOICES)
+      710 +
+      711 +        labels = []
+      712 +        counts = []
+      713 +        total = sum(item['count'] for item in verdicts)
+      714 +
+      715 +        for item in verdicts:
+      716 +            labels.append(verdict_choices.get(item['verdic
+          +t'], item['verdict']))
+      717 +            counts.append(item['count'])
+      718 +
+      719 +        # Calculate percentages
+      720 +        percentages = [count / max(total, 1) for count in
+          +counts]
+      721 +
+      722 +        return JsonResponse({
+      723 +            "success": True,
+      724 +            "distribution": [
+      725 +                {
+      726 +                    "verdict": label,
+      727 +                    "count": count,
+      728 +                    "percentage": pct
+      729 +                }
+      730 +                for label, count, pct in zip(labels, count
+          +s, percentages)
+      731 +            ],
+      732 +            "chartData": {
+      733 +                "labels": labels,
+      734 +                "counts": counts
+      735 +            }
+      736 +        })
+      737 +    except Exception as e:
+      738 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      739 +
+      740 +
+      741 +@login_required
+      742 +def api_severity_distribution(request):
+      743 +    """API endpoint for severity distribution data"""
+      744 +    try:
+      745 +        # Get distribution by severity
+      746 +        severities = Detection.objects.values('severity').
+          +annotate(
+      747 +            count=Count('id')
+      748 +        ).order_by('-count')
+      749 +
+      750 +        # Get severity choices for labels
+      751 +        severity_choices = dict(Detection.SEVERITY_CHOICES
+          +)
+      752 +
+      753 +        labels = []
+      754 +        counts = []
+      755 +        total = sum(item['count'] for item in severities)
+      756 +
+      757 +        for item in severities:
+      758 +            labels.append(severity_choices.get(item['sever
+          +ity'], item['severity']))
+      759 +            counts.append(item['count'])
+      760 +
+      761 +        # Calculate percentages
+      762 +        percentages = [count / max(total, 1) for count in
+          +counts]
+      763 +
+      764 +        return JsonResponse({
+      765 +            "success": True,
+      766 +            "distribution": [
+      767 +                {
+      768 +                    "severity": label,
+      769 +                    "count": count,
+      770 +                    "percentage": pct
+      771 +                }
+      772 +                for label, count, pct in zip(labels, count
+          +s, percentages)
+      773 +            ],
+      774 +            "chartData": {
+      775 +                "labels": labels,
+      776 +                "counts": counts
+      777 +            }
+      778 +        })
+      779 +    except Exception as e:
+      780 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      781 +
+      782 +
+      783 +@login_required
+      784 +def api_high_risk_detections(request):
+      785 +    """API endpoint for high-risk detections (last 24 hour
+          +s)"""
+      786 +    try:
+      787 +        # Get detections from last 24 hours that are eithe
+          +r confirmed attacks or high confidence anomalies
+      788 +        twenty_four_hours_ago = timezone.now() - timezone.
+          +timedelta(hours=24)
+      789 +
+      790 +        high_risk = Detection.objects.filter(
+      791 +            timestamp__gte=twenty_four_hours_ago
+      792 +        ).filter(
+      793 +            Q(verdict=Detection.VERDICT_CONFIRMED_ATTACK)
+          +|
+      794 +            Q(verdict=Detection.VERDICT_KNOWN_ATTACK, rf_c
+          +onfidence__gte=0.8) |
+      795 +            Q(is_anomaly=True, rf_confidence__gte=0.7)
+      796 +        ).select_related('batch').order_by('-timestamp')[:
+          +20]
+      797 +
+      798 +        detections = [
+      799 +            {
+      800 +                "id": d.id,
+      801 +                "timestamp": d.timestamp.strftime("%Y-%m-%
+          +d %H:%M:%S"),
+      802 +                "source_ip": d.source_ip,
+      803 +                "destination_ip": d.destination_ip,
+      804 +                "verdict": d.get_verdict_display(),
+      805 +                "severity": d.severity,
+      806 +                "confidence": round(d.rf_confidence * 100,
+          + 1)
+      807 +            }
+      808 +            for d in high_risk
+      809 +        ]
+      810 +
+      811 +        return JsonResponse({
+      812 +            "success": True,
+      813 +            "detections": detections
+      814 +        })
+      815 +    except Exception as e:
+      816 +        return JsonResponse({"success": False, "error": st
+          +r(e)}, status=500)
+      817 +
+      818 +
+      819 +@login_required
+      820 +def detection_summary(request):
+      821 +    """Detection summary analytics page"""
+      822 +    return render(request, "dashboard/detection_summary.ht
+          +ml")
+      823 +
+      824 +
+      825 +# --------------------------------------------------------
+          +-----
